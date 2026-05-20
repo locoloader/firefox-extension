@@ -1,33 +1,24 @@
-# Locoloader Chrome Extension
+### Issue #1
+"As your extension is compatible with Firefox 139 and earlier a custom data collection collection and transmission consent screen is required in order to be compliant.”
 
-### :hammer_and_wrench: Installation
-1. Download this extension as a [ZIP file from GitHub](https://github.com/locoloader/chrome-extension/archive/refs/heads/main.zip)
-2. Unzip the file and you should have a folder named `chrome-extension-main`
-3. Visit the URL `chrome://extensions` and enable `Developer mode`
-4. Drag and drop the `chrome-extension-main` folder anywhere onto the extensions page to install it (do not delete the folder afterwards)
+Solution: The extension is no longer compatible with Firefox 139 and earlier; it is now a Manifest V3 (MV3) extension.
 
-<p><img src="./img/how-to-install-chrome-extension-locally.gif" width="580" alt="How to Install the Chrome Extension Locally"></p>
+### Issue #2
+“Please remove all remote hosts from the CSP ‘script-src’ declaration, if any.”
 
-:bulb: If you don't want to install the extension from source, you can still use our [Firefox extension](https://addons.mozilla.org/en-US/firefox/addon/locoloader/).
+Solution: There were and are no script-src directives linking to external sources.
 
-### :hammer_and_wrench: Update
-1. Visit the URL `chrome://extensions`
-2. Remove the Locoloader extension
-3. Follow the [installation steps](#hammer_and_wrench-installation) 
+### Issue #3
+"Sources, specifically Third party library information missing: Your add-on includes a third-party library.”
 
-### :thinking: Why not from the Chrome Web Store?
-This extension has been in the Chrome Web Store for almost 4 years and has been installed by more than 100k+ users. Unfortunately, it has been removed from the store due to its potential use with adult content.
+Solution: We have added libs/links.md, which details the exact origins and versions of the third-party libraries used.
 
-<p><img src="./img/chrome-web-store-removal-notification.png" width="580" alt="Chrome Web Store Removal Notification"></p>
+### Issue #4:
+"The declared data collection permissions do not match the data collected and transmitted by the add-on. Personal data (unique identifier).”
 
-### :thinking: Is it safe?
-We have open-sourced the Locoloader extension and anyone can take a look at the source code for full transparency. If you discover a security vulnerability, please send an e-mail to [info@locoloader.com](mailto:info@locoloader.com).  
+Solution: This is a false positive. We do not collect, store, or transmit any personal data. The referenced UUIDs (universally unique identifiers) are used solely to manage HTTP headers and tabs, so the personallyIdentifyingInfo permission does not apply to our use case. We believe the websiteContent permission is the best fit for our extension.
 
-### MIT License
-Copyright (c) 2024 Locoloader.com
+### Issue #5
+“Security, specifically Remote code execution”.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+Response: fetcher.js executes code using eval(), but this code originates exclusively from the trusted sources https://www.locoloader.com/* and https://www.locoloader.test/*. This code allows Locoloader users to scrape the data they request. We decided to separate this code from the extension because it is subject to frequent updates. This approach allows us to provide a better user experience (UX) by deploying quick fixes when a scraper breaks, without forcing frequent extension updates. It also prevents us from flooding you with weekly extension updates just because we changed a CSS selector in our scraping script, for example. Please reconsider this point and let us know whether we need to include our scraping scripts directly within the extension or if we can continue to run them from these trusted sources before we re-submit our extension to the store for approval.
