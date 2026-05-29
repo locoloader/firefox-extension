@@ -2,7 +2,7 @@
 
 // Utils
 // ---------------------------------------------
-const debug = true;
+const debug = false;
 function log(...message) {
     if (debug) {
         console.log(...message);
@@ -334,8 +334,6 @@ async function downloadLinks(message) {
                         },
                         condition: {
                             tabIds: [tab.id],
-                            isUrlFilterCaseSensitive: false,
-                            urlFilter: '*',
                             resourceTypes: ['main_frame', 'media'],
                         },
                     });
@@ -431,12 +429,30 @@ async function downloadLinks(message) {
 
 // Open pre-configured tab with fetcher.js.
 // ---------------------------------------------
-function openFetcher(message) {
+function openTab(message) {
     return new Promise(async (resolve) => {
-        // Open background tab.
+        const defaultResponse = [{
+            result: {
+                event: 'PRE_EXTRACTION',
+                target: 'app',
+                tabUUID: message.tabUUID,
+                url: message.url,
+                headers: {},
+                html: '',
+                dom: '',
+                actions: {
+                    err: [],
+                    result: [],
+                },
+                xhr: [],
+                windowURL: message.windowURL,
+            }
+        }];
+
+        // Open tab.
         const tab = await chrome.tabs.create({ active: false });
 
-        // Set headers only to fetcher tab.
+        // Set headers only to tab.
         log('Received headers:', message.headers);
         const headerInfoArr = [];
         for (const headerObj of message.headers) {
@@ -448,31 +464,92 @@ function openFetcher(message) {
             }
         }
 
+        // Remove tab headers.
+        function cleanupHeaders(headerInfoArr) {
+            for (const headerInfo of headerInfoArr) {
+                removeHeaders(headerInfo.UUID);
+            }
+        }
+
         // Set final tab URL.
         await chrome.tabs.update(tab.id, { url: message.url, active: false });
 
         // Wait for tab to complete URL update.
-        const waitForLoad = new Promise((resolveLoad) => {
-            chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
+        const waitForLoad = new Promise((resolve) => {
+            let timeoutId;
+
+            // Listen for successful updates.
+            function updateListener(tabId, changeInfo, currentTab) {
                 if (tabId === tab.id && changeInfo.status === 'complete') {
-                    chrome.tabs.onUpdated.removeListener(listener);
-                    resolveLoad();
+                    if (currentTab.url && currentTab.url !== 'about:blank' && currentTab.url !== 'about:newtab') {
+                        cleanup();
+                        resolve(true);
+                        log(`Tab ${tab.id} loading complete.`);
+                    }
+                }
+            }
+
+            // Listen for premature closures.
+            function closeListener(closedTabId) {
+                if (closedTabId === tab.id) {
+                    cleanup();
+                    resolve(false);
+                    log(`Tab ${tab.id} closed prematurely.`);
+                }
+            }
+
+            // Centralized cleanup to prevent memory leaks.
+            function cleanup() {
+                chrome.tabs.onUpdated.removeListener(updateListener);
+                chrome.tabs.onRemoved.removeListener(closeListener);
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+            }
+
+            chrome.tabs.onUpdated.addListener(updateListener);
+            chrome.tabs.onRemoved.addListener(closeListener);
+
+            // Failsafe: In case it finished loading before listeners attached.
+            chrome.tabs.get(tab.id, (currentTab) => {
+                if (currentTab.status === 'complete' && currentTab.url && currentTab.url !== 'about:blank' && currentTab.url !== 'about:newtab') {
+                    cleanup();
+                    resolve(true);
+                    log(`Tab ${tab.id} finished loading before listeners attached.`);
                 }
             });
+
+            // Ultimate failsafe: Timeout after 120 seconds to prevent infinite hanging.
+            timeoutId = setTimeout(() => {
+                cleanup();
+                resolve(false);
+                log(`Timeout: Tab ${tab.id} took too long to load.`);
+            }, 120000);
         });
-        await waitForLoad;
+
+        if (!await waitForLoad) {
+            cleanupHeaders(headerInfoArr);
+            return resolve(defaultResponse);
+        }
+
+        let injectionResult;
 
         // Monkeypatch console.clear().
-        await chrome.scripting.executeScript({
+        injectionResult = await ensureExecuteScript({
             world: 'MAIN',
             target: { tabId: tab.id },
             func: () => {
-                console.clear = () => {};
+                console.clear = () => { };
             },
         });
+        if (!injectionResult) {
+            log(`Injecting monkeypatch failed.`);
+            cleanupHeaders(headerInfoArr);
+            return resolve(defaultResponse);
+        }
 
         // Configuration for fetcher.js.
-        await chrome.scripting.executeScript({
+        injectionResult = await ensureExecuteScript({
             world: 'MAIN',
             target: { tabId: tab.id },
             func: (message) => {
@@ -480,9 +557,44 @@ function openFetcher(message) {
             },
             args: [message],
         });
+        if (!injectionResult) {
+            log(`Injecting message failed.`);
+            cleanupHeaders(headerInfoArr);
+            return resolve(defaultResponse);
+        }
+
+        // Configuration for fetcher.js.
+        if (message.actions.script) {
+            // Avoid path traversal attack using base folder URL.
+            const baseFolderUrl = browser.runtime.getURL('extractors/');
+            const scriptUrl = new URL(`${message.actions.script}.js`, baseFolderUrl).href;
+            log('Script to fetch:', scriptUrl);
+
+            // Read script.
+            const response = await fetch(scriptUrl);
+            if (response?.ok) {
+                log('Script successfuly fetched.');
+                const scriptContent = await response.text();
+
+                // Add script to fetcher.js.
+                injectionResult = await ensureExecuteScript({
+                    world: 'MAIN',
+                    target: { tabId: tab.id },
+                    func: (scriptContent) => {
+                        document.LLScript = scriptContent;
+                    },
+                    args: [scriptContent],
+                });
+                if (!injectionResult) {
+                    log(`Injecting script failed.`);
+                    cleanupHeaders(headerInfoArr);
+                    return resolve(defaultResponse);
+                }
+            }
+        }
 
         // Run fetcher.js.
-        const result = await chrome.scripting.executeScript({
+        const result = await ensureExecuteScript({
             world: 'MAIN',
             target: { tabId: tab.id },
             files: ['fetcher.js'],
@@ -491,27 +603,46 @@ function openFetcher(message) {
         log('Tab in background.js received result from fetcher.js:', result);
 
         // Remove tab headers.
-        for (const headerInfo of headerInfoArr) {
-            removeHeaders(headerInfo.UUID);
+        cleanupHeaders(headerInfoArr);
+
+        try {
+            // Close tab.
+            await chrome.tabs.remove(tab.id);
+        } catch (err) {
+            // Tab has been closed prematurely.
+            return resolve(defaultResponse);
         }
 
-        // Close fetched tab.
-        await chrome.tabs.remove(tab.id);
-
         // If response contains reFetch attribute, it means that page should be re-fetched.
-        if (result[0].result.reFetch) {
+        if (result && result[0].result.reFetch) {
             setTimeout(async () => {
                 // Only re-fetch once.
                 message['doNotReFetch'] = true;
 
                 // Re-open, re-fetch and return result from fetcher.js.
-                resolve(await openFetcher(message));
+                resolve(await openTab(message));
             }, 2000);
         } else {
             // Return result from fetcher.js.
             resolve(result);
         }
     });
+}
+
+async function ensureExecuteScript(scriptOptions, maxRetries = 5, delayMs = 50) {
+    let lastError;
+
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await chrome.scripting.executeScript(scriptOptions);
+        } catch (error) {
+            lastError = error;
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
+
+    log(`Script injection failed after ${maxRetries} attempts. Last error: ${lastError.message}`);
+    return false;
 }
 
 // Listening to message
@@ -751,7 +882,7 @@ chrome.runtime.onMessage.addListener(async (message, sender) => {
         try {
             // Send request.
             fetchResponse = await fetch(message.url, message.fetchOptions ? message.fetchOptions : {});
-        } catch (e) {}
+        } catch (e) { }
 
         // Remove request headers.
         if (typeof headerInfo.UUID !== 'undefined') {
@@ -774,7 +905,7 @@ chrome.runtime.onMessage.addListener(async (message, sender) => {
     }
 
     if (message.type === 'ext-tab') {
-        const pageObj = await openFetcher(message);
+        const pageObj = await openTab(message);
         log('Pre-extraction data:', pageObj);
 
         // Response.

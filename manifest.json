@@ -1,7 +1,7 @@
 {
   "name": "Locoloader",
   "description": "Add extra powers⚡ to Locoloader.com!",
-  "version": "1.7.7",
+  "version": "1.7.8",
   "manifest_version": 3,
   "permissions": [
     "tabs",
@@ -37,7 +37,7 @@
   ],
   "browser_specific_settings": {
     "gecko": {
-      "id": "@locoloader",
+      "id": "{21368c2e-1e43-414c-9c63-e1b87782681f}",
       "data_collection_permissions": {
         "required": [
           "websiteContent"

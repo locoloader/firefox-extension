@@ -1,6 +1,6 @@
 // Obtain AsyncFunction
 // @link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncFunction
-const LLAsyncFunction = async function () {}.constructor;
+const LLAsyncFunction = async function () { }.constructor;
 
 // Actions
 const LLActionsErrors = [];
@@ -214,15 +214,15 @@ const LLActions = {
             }, maxTime);
         });
     },
-    eval: (code) => {
+    script: () => {
         return new Promise((resolve) => {
-            if (typeof code !== 'string') {
-                LLActionsErrors.push('Type error: Code to evaluate must be a string.');
+            if (!document.LLScript) {
+                LLActionsErrors.push('Unknown script.');
                 resolve();
                 return;
             }
 
-            code = 'async function SB_go() {' + code + '} resolve(await SB_go());';
+            code = document.LLScript + ' resolve(await SB_go());';
             new LLAsyncFunction('resolve', code)(resolve);
         });
     },
@@ -274,12 +274,12 @@ function fetcher(message) {
         // ...get page HTTP headers
         response.headers = Object.fromEntries(fetchResponse.headers.entries());
 
-        // Evaluate JS code and get the result (if any)
-        if (message.actions) {
+        // Run action and get the result (if any).
+        if (Object.keys(message.actions).length) {
             const resultArr = [];
-            for (const index in message.actions) {
-                for (const key in message.actions[index]) {
-                    const result = await LLActions[key](message.actions[index][key]);
+            for (const action in message.actions) {
+                if (LLActions[action]) {
+                    const result = await LLActions[action](message.actions[action]);
                     if (result) {
                         resultArr.push(result);
                     }
