@@ -35,6 +35,7 @@ for (const key in extensionOptions) {
 // ---------------------------------------------
 const activeDownloadIds = new Set();
 const filenameToDownloadInfo = new Map();
+let pendingDownloads = 0;
 let remainingLinksUI = 0;
 let activeBatchTabUUID = '';
 let activeBatchTabId = '';
@@ -51,7 +52,7 @@ function randomChars() {
 }
 
 function getDownloadInfoByFilename(downloadItem) {
-    const filePath = downloadItem.filename;
+    const filePath = downloadItem.filename.replace(/\\/g, '/');
     const filename = filePath.substring(filePath.lastIndexOf('/') + 1);
 
     if (filenameToDownloadInfo.has(filename)) {
@@ -61,7 +62,7 @@ function getDownloadInfoByFilename(downloadItem) {
     }
 }
 
-chrome.downloads.onCreated.addListener(async (downloadItem) => {
+chrome.downloads.onCreated.addListener((downloadItem) => {
     // Download started.
     log(`File download started(${activeDownloadIds.size}):`, downloadItem);
 
@@ -78,8 +79,9 @@ chrome.downloads.onCreated.addListener(async (downloadItem) => {
     if (downloadInfo.tabId) {
         // Close download tab, it's no longer needed.
         try {
-            await chrome.tabs.remove(downloadInfo.tabId);
-            log('Tab closed:', downloadInfo.tabId);
+            chrome.tabs.remove(downloadInfo.tabId, () => {
+                log('Tab closed:', downloadInfo.tabId);
+            });
         } catch (e) {
             log('Tab hase been already closed:', downloadInfo.tabId);
         }
@@ -164,12 +166,16 @@ chrome.downloads.onChanged.addListener((downloadDelta) => {
             }
 
             if (activeBatchTabUUID && activeMessage.links?.length) {
+                pendingDownloads++
+
                 // Download next link.
-                setTimeout(() => {
+                setTimeout(async () => {
                     // Only trigger if the batch wasn't cancelled during the delay.
                     if (activeBatchTabUUID && activeMessage.links?.length) {
-                        downloadLinks(activeMessage, 1);
+                        await downloadLinks(activeMessage, 1);
                     }
+                    pendingDownloads = Math.max(0, pendingDownloads - 1);
+                    checkDownloadCompletion();
                 }, 1000);
             } else if (activeBatchTabUUID && activeMessage.links?.length === 0) {
                 // All links have been sent to download queue, but downloading may still be in progress.
@@ -177,15 +183,22 @@ chrome.downloads.onChanged.addListener((downloadDelta) => {
                 activeMessage = {};
             }
 
-            if (!activeDownloadIds.size && !activeMessage.links) {
-                log('All files have been downloaded.');
-                filenameToDownloadInfo.clear();
-                activeBatchTabUUID = '';
-                activeBatchTabId = '';
-            }
+            checkDownloadCompletion();
         });
     }
 });
+
+function checkDownloadCompletion() {
+    if (!activeDownloadIds.size && !activeMessage.links?.length && !pendingDownloads) {
+        log('All files have been downloaded.');
+        filenameToDownloadInfo.clear();
+        activeBatchTabUUID = '';
+        activeBatchTabId = '';
+
+        // Ensures HTTP headers are removed for interrupted downloads.
+        removeHeadersAll();
+    }
+}
 
 function normalizeFilename(name, ext, unique = false) {
     const normalizedFileName = name.replace(/[\/\(\)]/g, '-');
@@ -267,6 +280,7 @@ async function downloadLinks(message, maxConcurrentDownloads = 3) {
             async (tabs) => {
                 // Did we find any Locoloader tab?
                 if (!tabs[0]) {
+                    log('No Locoloader tab found.');
                     return;
                 }
 
@@ -304,12 +318,16 @@ async function downloadLinks(message, maxConcurrentDownloads = 3) {
                     log('Saved:', filename, downloadInfo);
 
                     // Init download.
-                    await chrome.downloads.download({
+                    const downloadId = await chrome.downloads.download({
                         url,
                         filename,
                         saveAs: false,
                         conflictAction: 'overwrite',
                     });
+
+                    if (downloadId) {
+                        activeDownloadIds.add(downloadId);
+                    }
                 }
 
                 if (link.download === 'url') {
@@ -413,15 +431,28 @@ async function downloadLinks(message, maxConcurrentDownloads = 3) {
             }
 
             // Download
-            await chrome.downloads.download({
+            const downloadId = await chrome.downloads.download({
                 url,
                 filename,
                 saveAs: false,
                 conflictAction: 'overwrite',
             });
+
+            if (downloadId) {
+                activeDownloadIds.add(downloadId);
+            }
         }
     }
 }
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+    if (tabId === activeBatchTabId) {
+        log('Batch tab closed prematurely. Stop any further downloads.');
+        activeBatchTabUUID = '';
+        activeBatchTabId = '';
+        activeMessage = {};
+    }
+});
 
 // Open pre-configured tab with fetcher.js.
 // ---------------------------------------------
