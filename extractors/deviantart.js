@@ -40,7 +40,7 @@ async function SB_go() {
             return 'art';
         }
 
-        if (url.match(/deviantart\.com\/[^\/]+\/gallery(\/|\?)?/)) {
+        if (url.match(/deviantart\.com\/[^\/]+\/(gallery|favourites)(\/|\?)?/)) {
             return 'gallery';
         }
 
