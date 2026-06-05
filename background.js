@@ -166,7 +166,7 @@ chrome.downloads.onChanged.addListener((downloadDelta) => {
             }
 
             if (activeBatchTabUUID && activeMessage.links?.length) {
-                pendingDownloads++
+                pendingDownloads++;
 
                 // Download next link.
                 setTimeout(async () => {
@@ -458,23 +458,25 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // ---------------------------------------------
 function openTab(message) {
     return new Promise(async (resolve) => {
-        const defaultResponse = [{
-            result: {
-                event: 'PRE_EXTRACTION',
-                target: 'app',
-                tabUUID: message.tabUUID,
-                url: message.url,
-                headers: {},
-                html: '',
-                dom: '',
-                actions: {
-                    err: [],
-                    result: [],
+        const defaultResponse = [
+            {
+                result: {
+                    event: 'PRE_EXTRACTION',
+                    target: 'app',
+                    tabUUID: message.tabUUID,
+                    url: message.url,
+                    headers: {},
+                    html: '',
+                    dom: '',
+                    actions: {
+                        err: [],
+                        result: [],
+                    },
+                    xhr: [],
+                    windowURL: message.windowURL,
                 },
-                xhr: [],
-                windowURL: message.windowURL,
-            }
-        }];
+            },
+        ];
 
         // Open tab.
         const tab = await chrome.tabs.create({ active: false });
@@ -539,7 +541,12 @@ function openTab(message) {
 
             // Failsafe: In case it finished loading before listeners attached.
             chrome.tabs.get(tab.id, (currentTab) => {
-                if (currentTab.status === 'complete' && currentTab.url && currentTab.url !== 'about:blank' && currentTab.url !== 'about:newtab') {
+                if (
+                    currentTab.status === 'complete' &&
+                    currentTab.url &&
+                    currentTab.url !== 'about:blank' &&
+                    currentTab.url !== 'about:newtab'
+                ) {
                     cleanup();
                     resolve(true);
                     log(`Tab ${tab.id} finished loading before listeners attached.`);
@@ -554,7 +561,7 @@ function openTab(message) {
             }, 120000);
         });
 
-        if (!await waitForLoad) {
+        if (!(await waitForLoad)) {
             cleanupHeaders(headerInfoArr);
             return resolve(defaultResponse);
         }
@@ -664,7 +671,7 @@ async function ensureExecuteScript(scriptOptions, maxRetries = 5, delayMs = 50) 
             return await chrome.scripting.executeScript(scriptOptions);
         } catch (error) {
             lastError = error;
-            await new Promise(resolve => setTimeout(resolve, delayMs));
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
         }
     }
 
@@ -863,7 +870,7 @@ chrome.runtime.onMessage.addListener(async (message, sender) => {
 
         // ...other HTTP headers
         if (message.fetchOptions.headers && Object.keys(message.fetchOptions.headers)) {
-            for (const [key, val] in message.fetchOptions.headers) {
+            for (const [key, val] of Object.entries(message.fetchOptions.headers)) {
                 requestHeaders.push({
                     header: key,
                     operation: 'set',
@@ -985,11 +992,15 @@ function hash(string) {
 }
 
 // Set declarativeNetRequest HTTP headers.
-async function setHeaders(action, condition, permanent = false) {
+async function setHeaders(action, condition) {
     if (!action || !condition) {
         // Cannot update session rules without both action and condition.
         return;
     }
+
+    // Remove disallowed headers.
+    sanitizeHeaders(action.requestHeaders);
+    sanitizeHeaders(action.responseHeaders);
 
     // Generate header uid.
     const jsonString = JSON.stringify({ action, condition });
@@ -1007,7 +1018,6 @@ async function setHeaders(action, condition, permanent = false) {
     const headerInfo = {
         id: headerCount,
         UUID: headerUUID,
-        permanent: permanent,
     };
 
     // Store active header info.
@@ -1015,7 +1025,6 @@ async function setHeaders(action, condition, permanent = false) {
 
     log('Set headers (ruleId):', headerInfo.id);
     log('Set headers (hash):', headerInfo.UUID);
-    log('Set headers (permanent):', headerInfo.permanent);
     log('Set headers (action):', action);
     log('Set headers (condition):', condition);
 
@@ -1036,29 +1045,64 @@ async function setHeaders(action, condition, permanent = false) {
     return headerInfo;
 }
 
-// Remove declarativeNetRequest HTTP headers incl. permanent ones if set to true.
-function removeHeaders(headerUUID, removePermanent = false) {
+// Ensure disallowed headers are removed.
+function sanitizeHeaders(headerArr) {
+    const DISALLOWED_HEADERS = new Set([
+        // Core Security Policies.
+        'content-security-policy',
+        'content-security-policy-report-only',
+        'strict-transport-security',
+
+        // Framing and Sniffing Protections.
+        'x-frame-options',
+        'x-content-type-options',
+        'x-xss-protection',
+
+        // Cross-Origin Isolation.
+        'cross-origin-embedder-policy',
+        'cross-origin-opener-policy',
+        'cross-origin-resource-policy',
+
+        // CORS Headers.
+        'access-control-allow-origin',
+        'access-control-allow-credentials',
+        'access-control-allow-methods',
+        'access-control-allow-headers',
+
+        // Feature Permissions
+        'permissions-policy',
+        'feature-policy',
+    ]);
+
+    if (Array.isArray(headerArr)) {
+        for (let i = headerArr.length - 1; i >= 0; i--) {
+            const item = headerArr[i];
+            if (typeof item?.header === 'string' && DISALLOWED_HEADERS.has(item.header.toLowerCase())) {
+                headerArr.splice(i, 1);
+            }
+        }
+    }
+}
+
+// Remove declarativeNetRequest HTTP headers.
+function removeHeaders(headerUUID) {
     // Do not try removing non-existing headers.
     if (!headerHash[headerUUID]) {
         return;
     }
 
-    // Do not remove permanent headers if not set to true.
-    if (!headerHash[headerUUID].permanent || (headerHash[headerUUID].permanent && removePermanent)) {
-        log('Remove headers (ruleId):', headerHash[headerUUID].id);
-        log('Remove headers (hash):', headerHash[headerUUID].UUID);
-        log('Remove headers (permanent):', headerHash[headerUUID].permanent);
+    log('Remove headers (ruleId):', headerHash[headerUUID].id);
+    log('Remove headers (hash):', headerHash[headerUUID].UUID);
 
-        chrome.declarativeNetRequest.updateSessionRules({
-            removeRuleIds: [headerHash[headerUUID].id],
-        });
+    chrome.declarativeNetRequest.updateSessionRules({
+        removeRuleIds: [headerHash[headerUUID].id],
+    });
 
-        delete headerHash[headerUUID];
-        headerCount--;
-    }
+    delete headerHash[headerUUID];
+    headerCount--;
 }
 
-// Remove all declarativeNetRequest HTTP headers incl. permanent ones if set to true.
+// Remove all declarativeNetRequest HTTP headers.
 async function removeHeadersAll() {
     for (const key in headerHash) {
         removeHeaders(headerHash[key].UUID, true);

@@ -1,7 +1,7 @@
 {
   "name": "Locoloader",
-  "description": "Add extra powers⚡ to Locoloader.com!",
-  "version": "1.8.0",
+  "description": "Add extra powers ⚡ to Locoloader.com!",
+  "version": "1.8.1",
   "manifest_version": 3,
   "permissions": [
     "tabs",
@@ -43,7 +43,8 @@
           "websiteContent"
         ],
         "optional": []
-      }
+      },
+      "strict_min_version": "142.0"
     }
   }
 }
