@@ -1,6 +1,6 @@
 # Locoloader Firefox Extension
 
-> ⚠️ __Note__: This installation method is a temporary workaround while we resolve an extension update issue with the Mozilla team. Please note that if you restart your browser, the extension will be automatically removed.
+> ⚠️ __Note__: The recommended way to install this extension is directly from [Firefox Browser Add-ons](https://addons.mozilla.org/en-US/firefox/addon/locoloader/). If you install it using the steps below, the extension will automatically be removed the next time you restart your browser.
 
 ### 🛠️ Installation
 1. Click [here](https://github.com/locoloader/firefox-extension/archive/refs/heads/main.zip) to download the Locoloader extension from GitHub.
