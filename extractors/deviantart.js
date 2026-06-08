@@ -9,6 +9,11 @@ async function SB_go() {
 
     function LLGetContentType(el) {
         if (el.querySelector('span[aria-label="stack of images"]')) {
+            const imgElement = el.querySelector('img');
+            if (imgElement && imgElement.getAttribute('src').includes(',blur_')) {
+                return 'locked';
+            }
+
             return 'collection';
         }
 
