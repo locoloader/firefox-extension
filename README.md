@@ -4,15 +4,23 @@
 
 ### 🛠️ Installation
 1. Click [here](https://github.com/locoloader/firefox-extension/archive/refs/heads/main.zip) to download the Locoloader extension from GitHub.
-2. Extract (unzip) the downloaded file.
-3. Open this address in Firefox: `about:debugging#/runtime/this-firefox`
-4. Click the `Load Temporary Add-on…` button, find the folder with unzipped extension, and select and open the `manifest.json` file.
+2. Extract (unzip) the downloaded file. This will create a folder named `firefox-extension-main`. Do not delete or move this folder after installation, because the extension runs directly from it.
+3. Open the address `about:debugging#/runtime/this-firefox` in your Firefox browser.
+4. Click the `Load Temporary Add-on…` button, find the folder with the unzipped extension, and select and open the `manifest.json` file.
+
+### 💡 Installation Tips
+- Before you load the extension into Firefox, move the extension folder out of your `Downloads` folder. This ensures you won't accidentally delete it later when clearing out other downloaded files.
 
 ### ⚙️ Settings
-1. Open this address in Firefox: `about:addons`
+1. Open the address `about:addons` in your Firefox browser.
 2. Find the Locoloader extension, click the three-dot `...` button, and choose `Manage`.
 3. If you use Private Windows, set `Run in Private Windows` to `Allow`.
 4. Click the `Permissions and data` tab and turn on `Access your data for all websites`. Don't worry, this doesn't actually give us access to every website. Read more about how Firefox protects you [here](https://support.mozilla.org/en-US/kb/quarantined-domains).
+
+### ⬆️ Update
+1. Open the address `about:addons` in your Firefox browser.
+2. Remove the Locoloader extension.
+3. Follow the [installation steps](#installation).
 
 ### 🤔 Is it safe?
 We made the Locoloader extension open-source so anyone can look at the code for full transparency. If you find a security bug, please let us know at [info@locoloader.com](mailto:info@locoloader.com).
