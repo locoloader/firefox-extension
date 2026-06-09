@@ -8,6 +8,8 @@
 3. Open the address `about:debugging#/runtime/this-firefox` in your Firefox browser.
 4. Click the `Load Temporary Add-on…` button, find the folder with the unzipped extension, and select and open the `manifest.json` file.
 
+<p><img src="./img/how-to-install-firefox-extension-locally.gif" width="580" alt="How to Install the Firefox Extension Locally"></p>
+
 ### 💡 Installation Tips
 - Before you load the extension into Firefox, move the extension folder out of your `Downloads` folder. This ensures you won't accidentally delete it later when clearing out other downloaded files.
 
