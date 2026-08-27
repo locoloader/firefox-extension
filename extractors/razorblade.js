@@ -1,3 +1,4 @@
+// (async () => {
 async function SB_go() {
     let LLData = {
         'err': [],
@@ -27,7 +28,7 @@ async function SB_go() {
 
     const LLLastGalleryPageHtml = await LLFetchRes.text();
 
-    const LLThumbLinks = LLLastGalleryPageHtml.matchAll(/\/pics\/\d+\/[\w-]+\/\d+/gs);
+    const LLThumbLinks = LLLastGalleryPageHtml.matchAll(/https:\/\/(t|cc)\.\w+\.(com|tv)(\/bftv)?\/images\/[^\'"]+/gs);
     if (!LLThumbLinks) {
         LLData.err.push('Extraction error: Cannot extract thumb hrefs.');
         return LLData;
@@ -39,3 +40,6 @@ async function SB_go() {
 
     return LLData;
 }
+
+//     console.log(await SB_go());
+// })();

@@ -1,18 +1,26 @@
+// (async () => {
 async function SB_go() {
-    let LLData = {
+    const response = {
         err: [],
         content: [],
-        nextPage: '',
+        nextUrl: [],
     };
 
-    let extractedTitles = new Map();
+    const extractedTitles = new Map();
 
-    function LLGetContentType(el) {
-        if (el.querySelector('span[aria-label="stack of images"]')) {
+    function getContentType(el) {
+        if (
+            el.querySelector('span[aria-label="stack of images"]') ||
+            el.querySelector('span[aria-label="Pila de imágenes"]') ||
+            el.querySelector('span[aria-label="Bilderstapel"]') ||
+            el.querySelector('span[aria-label="pile d\'images"]') ||
+            el.querySelector('span[aria-label="pilha de imagens"]') ||
+            el.querySelector('span[aria-label="stapel met afbeeldingen"]')
+        ) {
             const imgElement = el.querySelector('img');
-            if (imgElement && imgElement.getAttribute('src').includes(',blur_')) {
-                return 'locked';
-            }
+            // if (imgElement && imgElement.getAttribute('src').includes(',blur_')) {
+            //     return 'locked';
+            // }
 
             return 'collection';
         }
@@ -26,9 +34,9 @@ async function SB_go() {
 
         const imgElement = el.querySelector('img');
         if (imgElement) {
-            if (imgElement.getAttribute('src').includes(',blur_')) {
-                return 'locked';
-            }
+            // if (imgElement.getAttribute('src').includes(',blur_')) {
+            //     return 'locked';
+            // }
 
             return 'image';
         }
@@ -40,7 +48,7 @@ async function SB_go() {
         return '';
     }
 
-    function LLGetUrlType(url) {
+    function getUrlType(url) {
         if (url.match(/deviantart\.com\/[^\/]+\/art(\/|\?)?|deviantart\.com\/stash\//)) {
             return 'art';
         }
@@ -49,93 +57,102 @@ async function SB_go() {
             return 'gallery';
         }
 
-        LLData.err.push('Cannot determine URL type.');
+        response.err.push('Cannot determine URL type.');
         return '';
     }
 
-    async function LLFetchPageHtml(url) {
-        console.log('Fetching:', url);
-
+    async function fetchPageHtml(url) {
         const res = await fetch(url);
 
         if (!res.ok) {
-            LLData.err.push('Cannot fetch url.');
+            response.err.push('Cannot fetch url.');
             return '';
         }
 
         return await res.text();
     }
 
-    function LLExtractDeviations(initialStateJson, pageUrl) {
+    function extractDeviations(initialStateJson, pageUrl) {
         for (const deviationId in initialStateJson['@@entities'].deviation) {
-            LLExtractDeviationById(initialStateJson, deviationId, pageUrl);
+            extractDeviationById(initialStateJson, deviationId, pageUrl);
         }
     }
 
-    async function LLExtractDeviationsByIds(initialStateJson, deviationIds, pageUrl) {
+    async function extractDeviationsByIds(initialStateJson, deviationIds, pageUrl) {
         for (const deviationId in deviationIds.id) {
             // If we extract deviations from gallery page, fetch initialStateJson from collection pages
             if (deviationIds.id[deviationId].type == 'collection') {
-                const html = await LLFetchPageHtml(deviationIds.id[deviationId].url);
+                const html = await fetchPageHtml(deviationIds.id[deviationId].url);
                 if (!html) return;
 
-                const collectionInitialStateJson = LLExtractInitialJsonFromPageHtml(html);
+                const collectionInitialStateJson = extractInitialJsonFromPageHtml(html);
                 if (collectionInitialStateJson) {
-                    LLExtractDeviationById(collectionInitialStateJson, deviationId, pageUrl);
+                    extractDeviationById(collectionInitialStateJson, deviationId, pageUrl);
                 }
             } else {
-                LLExtractDeviationById(initialStateJson, deviationId, pageUrl);
+                extractDeviationById(initialStateJson, deviationId, pageUrl);
             }
         }
     }
 
-    function LLExtractDeviationById(initialStateJson, deviationId, pageUrl) {
+    function extractDeviationById(initialStateJson, deviationId, pageUrl) {
         if (initialStateJson['@@entities'].deviation[deviationId]) {
             if (typeof initialStateJson['@@entities'].deviation[deviationId].media === 'undefined') {
-                LLData.err.push('Property @@entities.deviation[' + deviationId + '].media is missing, API changed.');
+                response.err.push('Property @@entities.deviation[' + deviationId + '].media is missing, API changed.');
                 return;
             }
 
             // Extract title.
             let title = 'Untitled';
             if (typeof initialStateJson['@@entities'].deviation[deviationId].title === 'undefined') {
-                LLData.err.push('Property @@entities.deviation[id].title is missing, API changed.');
+                response.err.push('Property @@entities.deviation[id].title is missing, API changed.');
             } else {
                 title = initialStateJson['@@entities'].deviation[deviationId].title;
             }
 
             // Extract deviation media.
-            LLExtractMedia(title, initialStateJson['@@entities'].deviation[deviationId].media, pageUrl);
+            extractMedia(title, initialStateJson['@@entities'].deviation[deviationId].media, pageUrl);
 
             // Extract deviation extended media.
             if (initialStateJson['@@entities'].deviationExtended) {
                 if (!initialStateJson['@@entities'].deviationExtended[deviationId]) {
-                    LLData.err.push('Property @@entities.deviationExtended[' + deviationId + '] is missing.');
+                    response.err.push('Property @@entities.deviationExtended[' + deviationId + '] is missing.');
                     return;
                 }
 
-                if (typeof initialStateJson['@@entities'].deviationExtended[deviationId].additionalMedia === 'undefined') {
-                    LLData.err.push('Property @@entities.deviationExtended[' + deviationId + '].additionalMedia is missing. Post does not include any additional media or API changed.');
+                if (
+                    typeof initialStateJson['@@entities'].deviationExtended[deviationId].additionalMedia === 'undefined'
+                ) {
+                    response.err.push(
+                        'Property @@entities.deviationExtended[' +
+                            deviationId +
+                            '].additionalMedia is missing. Post does not include any additional media or API changed.',
+                    );
                     return;
                 }
 
-                for (const additionalMedia of initialStateJson['@@entities'].deviationExtended[deviationId].additionalMedia) {
+                for (const additionalMedia of initialStateJson['@@entities'].deviationExtended[deviationId]
+                    .additionalMedia) {
                     if (typeof additionalMedia.media === 'undefined') {
-                        LLData.err.push('Property @@entities.deviationExtended[' + deviationId + '].additionalMedia[i].media is missing, API changed.');
+                        response.err.push(
+                            'Property @@entities.deviationExtended[' +
+                                deviationId +
+                                '].additionalMedia[i].media is missing, API changed.',
+                        );
                         return;
                     }
 
-                    LLExtractMedia(title, additionalMedia.media, pageUrl);
+                    extractMedia(title, additionalMedia.media, pageUrl);
                 }
             }
         } else {
-            LLData.err.push('Property @@entities.deviation[' + deviationId + '] is missing.');
+            response.err.push('Property @@entities.deviation[' + deviationId + '] is missing.');
         }
     }
 
-    function LLExtractMedia(title, media, pageUrl) {
+    function extractMedia(title, media, pageUrl) {
         if (typeof media.types === 'undefined') {
-            LLData.err.push('Property media.types is missing, API changed.');
+            response.err.push('Property media.types is missing, API changed.');
             return;
         }
 
@@ -150,95 +167,83 @@ async function SB_go() {
         }
 
         let thumbObj;
-        let imageObj;
-        let videoArr = [];
+        const images = [];
+        const videos = [];
 
         for (const mediaType of media.types) {
             if (typeof mediaType.t === 'undefined') {
-                LLData.err.push('Property media.types[i].t is missing, API changed.');
+                response.err.push('Property media.types[i].t is missing, API changed.');
                 continue;
             }
 
             // Extract thumb
             if (!thumbObj && (mediaType.t == '350T' || mediaType.t == '400T' || mediaType.t == 'preview')) {
-                thumbObj = LLExtractMediaImage(media, mediaType);
-                continue;
+                thumbObj = extractMediaImage(media, mediaType);
             }
 
             // Extract image
             if (mediaType.t == 'fullview') {
-                imageObj = LLExtractMediaImage(media, mediaType);
-                continue;
+                const extractedImage = extractMediaImage(media, mediaType);
+                if (extractedImage) {
+                    images.push(extractedImage);
+                }
             }
 
             // Extract PDF
             if (mediaType.t == 'pdf') {
-                imageObj = LLExtractMediaPdf(media, mediaType);
-                continue;
+                const extractedPdf = extractMediaPdf(media, mediaType);
+                if (extractedPdf) {
+                    images.push(extractedPdf);
+                }
             }
 
             // Extract video
             if (mediaType.t == 'video') {
-                const extractedVideo = LLExtractMediaVideo(media, mediaType);
-
+                const extractedVideo = extractMediaVideo(media, mediaType);
                 if (extractedVideo) {
-                    videoArr.push(extractedVideo);
+                    videos.push(extractedVideo);
                 }
-
-                continue;
             }
         }
 
         // Get thumb url
-        let thumbUrl = '';
-        if (thumbObj) {
-            thumbUrl = thumbObj.url;
-        } else if (imageObj) {
-            thumbUrl = imageObj.url;
-        }
+        const thumbUrl = thumbObj.url || images[0]?.url || '';
 
-        // Add image to response
-        if (imageObj) {
-            LLData.content.push({
-                url: pageUrl,
-                title: title,
-                thumb: thumbUrl || '',
-                links: [
-                    {
-                        url: imageObj.url,
-                        quality: imageObj.quality,
-                        type: 'image',
-                    },
-                ],
-            });
-        }
+        // Add links to response.
+        const links = [];
 
-        // Add video to response
-        let videoLinks = [];
-        for (const videoObj of videoArr) {
-            videoLinks.push({
-                url: videoObj.url,
-                quality: videoObj.quality,
+        for (const video of videos) {
+            links.push({
+                url: video.url,
+                quality: video.quality,
                 type: 'video',
             });
         }
 
-        if (videoLinks.length > 0) {
-            LLData.content.push({
+        for (const image of images) {
+            links.push({
+                url: image.url,
+                quality: image.quality,
+                type: 'image',
+            });
+        }
+
+        if (links.length) {
+            response.content.push({
                 title: title,
                 thumb: thumbUrl,
-                links: videoLinks,
+                links: links,
             });
         }
     }
 
-    function LLExtractMediaImage(media, mediaType) {
+    function extractMediaImage(media, mediaType) {
         let url = '';
         let quality = '';
 
         // Add base URI
         if (typeof media.baseUri === 'undefined') {
-            LLData.err.push('Property media.baseUri is missing, API changed.');
+            response.err.push('Property media.baseUri is missing, API changed.');
             return false;
         }
 
@@ -270,11 +275,11 @@ async function SB_go() {
         };
     }
 
-    function LLExtractMediaPdf(media, mediaType) {
+    function extractMediaPdf(media, mediaType) {
         let quality = '';
 
         if (typeof mediaType.s === 'undefined') {
-            LLData.err.push('Property mediaType.s is missing, API changed.');
+            response.err.push('Property mediaType.s is missing, API changed.');
             return false;
         }
 
@@ -284,22 +289,19 @@ async function SB_go() {
         };
     }
 
-    function LLExtractMediaVideo(media, mediaType) {
+    function extractMediaVideo(media, mediaType) {
         let url = '';
         let quality = '';
 
         // Add base URL
         if (typeof mediaType.b === 'undefined') {
-            LLData.err.push('Property media.types[i].b is missing, API changed.');
+            response.err.push('Property media.types[i].b is missing, API changed.');
             return false;
         }
 
         url += mediaType.b;
 
-        // Add token
-        if (media.token && media.token[0]) {
-            url += '?token=' + media.token[0];
-        }
+        // Videos do not work with token.
 
         // Replace pretty name
         if (media.prettyName) {
@@ -317,20 +319,7 @@ async function SB_go() {
         };
     }
 
-    async function LLFetchAndExtractGalleryPage(url) {
-        const html = await LLFetchPageHtml(url);
-        if (!html) return;
-
-        const deviationIds = LLExtractDeviationIds(html);
-        if (!deviationIds.length) return;
-
-        const initialStateJson = LLExtractInitialJsonFromPageHtml(html);
-        if (!initialStateJson) return;
-
-        await LLExtractDeviationsByIds(initialStateJson, deviationIds, url);
-    }
-
-    function LLExtractDeviationIds(html) {
+    function extractDeviationIds(html) {
         let deviationIds = {
             id: {},
             length: 0,
@@ -342,10 +331,10 @@ async function SB_go() {
         const LLItemElements = doc.querySelectorAll('div[data-testid="content_row"] > div > div');
         for (const LLItemElement of LLItemElements) {
             // Determine what content type thumb represents.
-            const LLContentType = LLGetContentType(LLItemElement);
+            const LLContentType = getContentType(LLItemElement);
 
             if (!LLContentType) {
-                LLData.err.push('Unsupported content type.');
+                response.err.push('Unsupported content type.');
                 continue;
             }
 
@@ -360,14 +349,14 @@ async function SB_go() {
             // Extract item href
             const LLItemHref = LLItemElement.querySelector('a').getAttribute('href');
             if (!LLItemHref) {
-                LLData.err.push('Cannot extract thumb href.');
+                response.err.push('Cannot extract thumb href.');
                 continue;
             }
 
             // Extract deviation id from href
             let deviationId = LLItemHref.match(/-(\d+)(\?.*)?$/);
             if (!deviationId || !deviationId[1]) {
-                LLData.err.push('Cannot extract deviation id.');
+                response.err.push('Cannot extract deviation id.');
                 continue;
             }
 
@@ -380,106 +369,89 @@ async function SB_go() {
         }
 
         if (!deviationIds.length) {
-            LLData.err.push('Empty gallery or cannot extract deviation IDs.');
+            response.err.push('Empty gallery or cannot extract deviation IDs.');
         }
 
         return deviationIds;
     }
 
-    function LLExtractInitialJsonFromPageHtml(html) {
+    function extractInitialJsonFromPageHtml(html) {
         // Extract __INITIAL_STATE__ json string
         const initialStateJsonString = html.match(/window\.__INITIAL_STATE__\s*=\s*JSON\.parse\(("[^\r\n]+")\);/);
         if (!initialStateJsonString || !initialStateJsonString[1]) {
-            LLData.err.push('Cannot extract initial state.');
+            response.err.push('Cannot extract initial state.');
             return false;
         }
 
         // Parse __INITIAL_STATE__ json string
         const initialStateJson = JSON.parse(JSON.parse(initialStateJsonString[1].replaceAll("\\'", "'").trim()));
         if (!initialStateJson) {
-            LLData.err.push('Cannot parse initial state.');
+            response.err.push('Cannot parse initial state.');
             return false;
         }
 
         // Check initialStateJson
         if (typeof initialStateJson['@@entities'] === 'undefined') {
-            LLData.err.push('Property @@entities is missing, API changed: ' + LLThumbHref);
+            response.err.push('Property @@entities is missing, API changed: ' + LLThumbHref);
             return false;
         }
 
         if (typeof initialStateJson['@@entities'].deviation === 'undefined') {
-            LLData.err.push('Property @@entities.deviation is missing, API changed.');
+            response.err.push('Property @@entities.deviation is missing, API changed.');
             return false;
         }
 
         if (typeof initialStateJson['@@entities'].deviationExtended === 'undefined') {
-            LLData.err.push('Property @@entities.deviationExtended is missing, API changed.');
+            response.err.push('Property @@entities.deviationExtended is missing, API changed.');
         }
 
         return initialStateJson;
     }
 
     // Determine if it's gallery or art URL
-    const urlType = LLGetUrlType(window.location.href);
-    if (!urlType) return LLData;
+    const urlType = getUrlType(window.location.href);
+    if (!urlType) {
+        return response;
+    }
 
     if (urlType == 'art') {
-        const currentPageHtml = new XMLSerializer().serializeToString(document.doctype) + document.getElementsByTagName('html')[0].outerHTML;
-        const initialStateJson = LLExtractInitialJsonFromPageHtml(currentPageHtml);
+        const currentPageHtml =
+            new XMLSerializer().serializeToString(document.doctype) +
+            document.getElementsByTagName('html')[0].outerHTML;
 
-        if (initialStateJson) LLExtractDeviations(initialStateJson, window.location.href);
+        const initialStateJson = extractInitialJsonFromPageHtml(currentPageHtml);
+        if (!initialStateJson) {
+            return response;
+        }
 
-        return LLData;
+        extractDeviations(initialStateJson, window.location.href);
+
+        return response;
     }
 
     if (urlType == 'gallery') {
-        // Check if the window.location.href contains a valid 'page' query string and use it as the current page.
-        let currentPageQuery = undefined;
-        const params = new URLSearchParams(window.location.search);
-        if (params.has('page') && params.get('page').match(/^\d+$/)) {
-            currentPageQuery = parseInt(params.get('page'));
+        const currentPageHtml = (await fetchPageHtml(window.location.href)) || '';
+        if (!currentPageHtml) {
+            return response;
         }
 
-        // Get current page HTML
-        const currentPageHtml = new XMLSerializer().serializeToString(document.doctype) + document.getElementsByTagName('html')[0].outerHTML;
-
-        // Extract the number of the last page.
-        let lastPage;
-        const matches = currentPageHtml.matchAll(/totalPages\\\":(\d+)/g);
-        if (matches) {
-            const pageNumbers = Array.from(matches).map((match) => Number(match[1]));
-            lastPage = Math.max(...pageNumbers);
+        const initialStateJson = extractInitialJsonFromPageHtml(currentPageHtml);
+        if (!initialStateJson) {
+            return response;
         }
 
-        // Fetch gallery URLs to extract up to 240 gallery items.
-        const startPage = currentPageQuery ? currentPageQuery : 1;
-        const endPage = lastPage ? Math.min(currentPageQuery ? currentPageQuery + 9 : 10, lastPage) : startPage;
-        const urlObj = new URL(window.location.href);
-        const urlWithoutQuery = urlObj.origin + urlObj.pathname;
-
-        for (let i = startPage; i <= endPage; i++) {
-            if (params.size) {
-                params.set('page', i);
-                await LLFetchAndExtractGalleryPage(urlWithoutQuery + '?' + params.toString());
-            } else {
-                await LLFetchAndExtractGalleryPage(urlWithoutQuery + '?page=' + i);
-            }
+        const deviationIds = extractDeviationIds(currentPageHtml);
+        if (!deviationIds.length) {
+            return response;
         }
 
-        // Add next page to result
-        if (lastPage && endPage < lastPage) {
-            let nextPage = '';
-            if (params.size) {
-                params.set('page', endPage + 1);
-                nextPage = urlWithoutQuery + '?' + params.toString();
-            } else {
-                nextPage = urlWithoutQuery + '?page=' + (endPage + 1);
-            }
-            LLData.nextPage = nextPage;
-        }
+        await extractDeviationsByIds(initialStateJson, deviationIds, window.location.href);
 
-        return LLData;
+        return response;
     }
 
-    return LLData;
+    return response;
 }
+
+//     console.log(await SB_go());
+// })();

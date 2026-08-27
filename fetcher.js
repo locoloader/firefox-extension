@@ -1,8 +1,27 @@
-// Obtain AsyncFunction
+const runAt = location.hash.startsWith('#fetcher-arg=') ? 'document_start' : 'document_loaded';
+
+// Obtain fetcher args.
+let message;
+
+if (runAt === 'document_start') {
+    // Get fetcher args from URL.
+    message = JSON.parse(decodeURIComponent(atob(location.hash.replace('#fetcher-arg=', ''))));
+
+    // Remove hash from URL.
+    history.replaceState(null, '', location.href.split('#')[0]);
+
+} else {
+    message = document.LLmessage;
+}
+
+// Monkey-patch console clear.
+console.clear = () => { };
+
+// Obtain AsyncFunction.
 // @link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncFunction
 const LLAsyncFunction = async function () { }.constructor;
 
-// Actions
+// Actions.
 const LLActionsErrors = [];
 const LLActionsScraped = [];
 const LLActions = {
@@ -216,19 +235,19 @@ const LLActions = {
     },
     script: () => {
         return new Promise((resolve) => {
-            if (!document.LLScript) {
+            if (!message.script) {
                 LLActionsErrors.push('Unknown script.');
                 resolve();
                 return;
             }
 
-            code = document.LLScript + ' resolve(await SB_go());';
+            code = message.script + ' resolve(await SB_go(\'' + message.lejp + '\'));';
             new LLAsyncFunction('resolve', code)(resolve);
         });
     },
 };
 
-// Data fetcher
+// Data fetcher.
 function fetcher(message) {
     return new Promise(async (resolve) => {
         // Default response
@@ -275,11 +294,12 @@ function fetcher(message) {
         response.headers = Object.fromEntries(fetchResponse.headers.entries());
 
         // Run action and get the result (if any).
-        if (Object.keys(message.actions).length) {
+        const actionKeys = Object.keys(message.actions);
+        if (actionKeys.length) {
             const resultArr = [];
-            for (const action in message.actions) {
-                if (LLActions[action]) {
-                    const result = await LLActions[action](message.actions[action]);
+            for (const key of actionKeys) {
+                if (LLActions[key]) {
+                    const result = await LLActions[key](message.actions[key]);
                     if (result) {
                         resultArr.push(result);
                     }
@@ -319,5 +339,12 @@ function fetcher(message) {
     });
 }
 
-// Fetch data from LLPage
-fetcher(document.LLPage);
+if (runAt === 'document_start') {
+    // Run fetcher and send result to background script.
+    fetcher(message).then((result) => {
+        document.dispatchEvent(new CustomEvent('ll-fetcher-done', { detail: result }));
+    });
+} else {
+    fetcher(message);
+}
+

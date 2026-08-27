@@ -1,10 +1,4 @@
 async function SB_go() {
-    // Data we return
-    let LLData = {
-        'err': [],
-        'content': [],
-    };
-
     function LLClick(selector) {
         const el = document.querySelector(selector);
         if (!el) {
@@ -154,6 +148,12 @@ async function SB_go() {
 
         return;
     }
+
+    // Data we return
+    var LLData = {
+        'err': [],
+        'content': [],
+    };
 
     const LLPageDom = await LLLoadInitializedDOM(/vjs-big-play-button|player\.zype\.com|img-responsive|swiper-wrapper|oftv_container/);
 
