@@ -54,6 +54,10 @@ async function SB_go() {
         }
 
         if (url.match(/deviantart\.com\/[^\/]+\/(gallery|favourites)(\/|\?)?/)) {
+            if (url.match(/\?q=/)) {
+                return 'gallery-search';
+            }
+
             return 'gallery';
         }
 
@@ -72,13 +76,13 @@ async function SB_go() {
         return await res.text();
     }
 
-    function extractDeviations(initialStateJson, pageUrl) {
+    function extractDeviations(initialStateJson) {
         for (const deviationId in initialStateJson['@@entities'].deviation) {
-            extractDeviationById(initialStateJson, deviationId, pageUrl);
+            extractDeviationById(initialStateJson, deviationId);
         }
     }
 
-    async function extractDeviationsByIds(initialStateJson, deviationIds, pageUrl) {
+    async function extractDeviationsByIds(initialStateJson, deviationIds) {
         for (const deviationId in deviationIds.id) {
             // If we extract deviations from gallery page, fetch initialStateJson from collection pages
             if (deviationIds.id[deviationId].type == 'collection') {
@@ -87,15 +91,15 @@ async function SB_go() {
 
                 const collectionInitialStateJson = extractInitialJsonFromPageHtml(html);
                 if (collectionInitialStateJson) {
-                    extractDeviationById(collectionInitialStateJson, deviationId, pageUrl);
+                    extractDeviationById(collectionInitialStateJson, deviationId);
                 }
             } else {
-                extractDeviationById(initialStateJson, deviationId, pageUrl);
+                extractDeviationById(initialStateJson, deviationId);
             }
         }
     }
 
-    function extractDeviationById(initialStateJson, deviationId, pageUrl) {
+    function extractDeviationById(initialStateJson, deviationId) {
         if (initialStateJson['@@entities'].deviation[deviationId]) {
             if (typeof initialStateJson['@@entities'].deviation[deviationId].media === 'undefined') {
                 response.err.push('Property @@entities.deviation[' + deviationId + '].media is missing, API changed.');
@@ -111,7 +115,7 @@ async function SB_go() {
             }
 
             // Extract deviation media.
-            extractMedia(title, initialStateJson['@@entities'].deviation[deviationId].media, pageUrl);
+            extractMedia(title, initialStateJson['@@entities'].deviation[deviationId].media);
 
             // Extract deviation extended media.
             if (initialStateJson['@@entities'].deviationExtended) {
@@ -142,7 +146,7 @@ async function SB_go() {
                         return;
                     }
 
-                    extractMedia(title, additionalMedia.media, pageUrl);
+                    extractMedia(title, additionalMedia.media);
                 }
             }
         } else {
@@ -150,7 +154,7 @@ async function SB_go() {
         }
     }
 
-    function extractMedia(title, media, pageUrl) {
+    function extractMedia(title, media) {
         if (typeof media.types === 'undefined') {
             response.err.push('Property media.types is missing, API changed.');
             return;
@@ -191,7 +195,7 @@ async function SB_go() {
 
             // Extract PDF
             if (mediaType.t == 'pdf') {
-                const extractedPdf = extractMediaPdf(media, mediaType);
+                const extractedPdf = extractMediaPdf(mediaType);
                 if (extractedPdf) {
                     images.push(extractedPdf);
                 }
@@ -275,9 +279,7 @@ async function SB_go() {
         };
     }
 
-    function extractMediaPdf(media, mediaType) {
-        let quality = '';
-
+    function extractMediaPdf(mediaType) {
         if (typeof mediaType.s === 'undefined') {
             response.err.push('Property mediaType.s is missing, API changed.');
             return false;
@@ -285,7 +287,7 @@ async function SB_go() {
 
         return {
             url: mediaType.s,
-            quality: quality,
+            quality: '',
         };
     }
 
@@ -446,6 +448,67 @@ async function SB_go() {
         }
 
         await extractDeviationsByIds(initialStateJson, deviationIds, window.location.href);
+
+        return response;
+    }
+
+    if (urlType == 'gallery-search') {
+        const currentPageHtml = (await fetchPageHtml(window.location.href)) || '';
+        if (!currentPageHtml) {
+            return response;
+        }
+
+        const initialStateJson = extractInitialJsonFromPageHtml(currentPageHtml);
+        if (!initialStateJson) {
+            return response;
+        }
+
+        const csrfToken = initialStateJson['@@config'].csrfToken || '';
+        if (!csrfToken) {
+            response.err.push('Cannot extract token.');
+            return response;
+        }
+
+        const userName = window.location.href.match(/\.com\/([^\/]+)\/(gallery|favourites)/)?.[1];
+        if (!userName) {
+            response.err.push('Cannot extract user name.');
+            return response;
+        }
+
+        const searchQuery = new URLSearchParams(window.location.search).get('q');
+        if (!searchQuery) {
+            response.err.push('Cannot get search query.');
+            return response;
+        }
+
+        const page = Number(new URLSearchParams(window.location.search).get('page')) || 1;
+
+        const offset = (page - 1) * 24;
+        const init = page === 1 ? 'true' : 'false';
+
+        const url = `https://www.deviantart.com/_puppy/dashared/gallection/search?username=${userName}&type=gallery&q=${searchQuery}&init=${init}&offset=${offset}&limit=24&da_minor_version=20230710&csrf_token=${csrfToken}`;
+        const res = await fetch(url);
+
+        if (!res.ok) {
+            response.err.push('Cannot fetch url.');
+            return response;
+        }
+
+        const apiResponse = await res.json();
+
+        if (!Array.isArray(apiResponse?.results)) {
+            response.err.push('Unexpected API response.');
+            return response;
+        }
+
+        for (const result of apiResponse?.results) {
+            if (!result.media) {
+                response.err.push('Property result.media is missing, API changed.');
+                continue;
+            }
+
+            extractMedia(result.title || '', result.media);
+        }
 
         return response;
     }
