@@ -123,7 +123,7 @@ async function SB_go() {
     function LLGetImgLink() {
         try {
             const LLTmpWindow = window.wrappedJSObject ? window.wrappedJSObject : window;
-            return LLTmpWindow.pswp.element.innerHTML.match(/src="([^"]+)/)[1].replaceAll('&amp;', '&')
+            return LLTmpWindow.pswp.element.querySelector('.pswp__img img').getAttribute('src').replaceAll('&amp;', '&')
         } catch {
             return false;
         }
@@ -132,7 +132,7 @@ async function SB_go() {
     function LLGetImgLinkNext() {
         try {
             const LLTmpWindow = window.wrappedJSObject ? window.wrappedJSObject : window;
-            return [...(LLTmpWindow.pswp.element.innerHTML.matchAll(/src="([^"]+)/g))][1][1].replaceAll('&amp;', '&');
+            return pswp.element.querySelectorAll('.pswp__img img')[1].getAttribute('src').replaceAll('&amp;', '&');
         } catch {
             return false;
         }
@@ -293,7 +293,7 @@ async function SB_go() {
                     return;
                 }
 
-                document.querySelector('.pswp__button--close').click();
+                pswp?.element?.querySelector('[data-icon-name="icon-close"]')?.closest('button')?.click();
 
                 const resolution = link.match(/\/(\d+)x(\d+)/);
 
@@ -340,7 +340,7 @@ async function SB_go() {
                         return;
                     }
 
-                    document.querySelector('.pswp__button--close').click();
+                    pswp?.element?.querySelector('[data-icon-name="icon-close"]')?.closest('button')?.click();
 
                     const resolution = link.match(/\/(\d+)x(\d+)/);
 
@@ -382,7 +382,7 @@ async function SB_go() {
                             return;
                         }
 
-                        document.querySelector('.pswp__button--close').click();
+                        pswp?.element?.querySelector('[data-icon-name="icon-close"]')?.closest('button')?.click();
 
                         const resolution = link.match(/\/(\d+)x(\d+)/);
 
