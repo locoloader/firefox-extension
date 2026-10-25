@@ -211,7 +211,7 @@ async function SB_go() {
         }
 
         // Get thumb url
-        const thumbUrl = thumbObj.url || images[0]?.url || '';
+        const thumbUrl = thumbObj?.url || images[0]?.url || '';
 
         // Add links to response.
         const links = [];
