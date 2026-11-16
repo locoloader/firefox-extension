@@ -17,10 +17,6 @@ if (runAt === 'document_start') {
 // Monkey-patch console clear.
 console.clear = () => { };
 
-// Obtain AsyncFunction.
-// @link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/AsyncFunction
-const LLAsyncFunction = async function () { }.constructor;
-
 // Actions.
 const LLActionsErrors = [];
 const LLActionsScraped = [];
@@ -234,15 +230,20 @@ const LLActions = {
         });
     },
     script: () => {
-        return new Promise((resolve) => {
-            if (!message.script) {
-                LLActionsErrors.push('Unknown script.');
+        return new Promise(async (resolve) => {
+            if (typeof window.SB_go !== 'function') {
+                LLActionsErrors.push('Extractor script not loaded or SB_go missing.');
                 resolve();
                 return;
             }
 
-            code = message.script + ' resolve(await SB_go(\'' + message.lejp + '\'));';
-            new LLAsyncFunction('resolve', code)(resolve);
+            try {
+                const res = await window.SB_go(message.lejp);
+                resolve(res);
+            } catch (e) {
+                LLActionsErrors.push('Script execution failed: ' + e.message);
+                resolve();
+            }
         });
     },
 };

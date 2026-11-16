@@ -622,22 +622,9 @@ function openFetcher(message, sender) {
         log('Run at:', runAt);
 
         // Fetcher script content.
-        let scriptContent = '';
-
+        const fetcherJs = ['fetcher.js'];
         if (message.actions?.script) {
-            // Avoid path traversal attack using base folder URL.
-            const baseFolderUrl = browser.runtime.getURL('extractors/');
-            const scriptUrl = new URL(`${message.actions.script}.js`, baseFolderUrl).href;
-            log('Script to fetch:', scriptUrl);
-
-            // Read script.
-            const response = await fetch(scriptUrl);
-            if (response?.ok) {
-                log('Script successfuly fetched.');
-                scriptContent = await response.text();
-            }
-
-            message['script'] = scriptContent;
+            fetcherJs.unshift(`extractors/${message.actions.script}.js`);
         }
 
         // Fetcher result.
@@ -658,7 +645,7 @@ function openFetcher(message, sender) {
                     matches: [url + '*'],
                     runAt: 'document_start',
                     world: 'MAIN',
-                    js: ['fetcher.js'],
+                    js: fetcherJs,
                 },
             ]);
 
@@ -766,7 +753,7 @@ function openFetcher(message, sender) {
             result = await ensureExecuteScript({
                 world: 'MAIN',
                 target: { tabId: tab.id },
-                files: ['fetcher.js'],
+                files: fetcherJs,
             });
         }
 
